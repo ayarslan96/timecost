@@ -1,0 +1,488 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:math';
+
+void main() {
+  runApp(TimeCostCalculatorApp());
+}
+
+class TimeCostCalculatorApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Time Cost Calculator',
+      theme: ThemeData(
+        primaryColor: Color(0xFF3A6FF7),
+        colorScheme: ColorScheme.light(
+          primary: Color(0xFF3A6FF7),
+          secondary: Color(0xFFFF9500),
+        ),
+        fontFamily: 'Inter',
+        scaffoldBackgroundColor: Colors.white,
+      ),
+      home: TimeCostCalculator(),
+    );
+  }
+}
+
+class TimeCostCalculator extends StatefulWidget {
+  @override
+  _TimeCostCalculatorState createState() => _TimeCostCalculatorState();
+}
+
+class _TimeCostCalculatorState extends State<TimeCostCalculator> {
+  final TextEditingController rateController = TextEditingController();
+  final TextEditingController spendingController = TextEditingController();
+  final ScrollController scrollController = ScrollController();
+  
+  String selectedRateCurrency = '\$ USD';
+  String selectedSpendingCurrency = '\$ USD';
+  String selectedRatePeriod = 'hour';
+  
+  String timeResult = '';
+  bool showResults = false;
+  
+  final Map<String, String> currencySymbols = {
+    '\$ USD': '\$',
+    '£ GBP': '£',
+    '€ EUR': '€',
+    '₺ TRY': '₺',
+    '¥ JPY': '¥',
+    '₹ INR': '₹',
+  };
+  
+  final List<Map<String, dynamic>> ratePresets = [
+    {'label': 'Min Wage', 'value': '15', 'period': 'hour'},
+    {'label': 'Median', 'value': '25', 'period': 'hour'},
+    {'label': 'High', 'value': '50', 'period': 'hour'},
+  ];
+  
+  final List<Map<String, dynamic>> spendingPresets = [
+    {'label': 'Coffee', 'value': '5'},
+    {'label': 'Dinner', 'value': '50'},
+    {'label': 'Phone', 'value': '1000'},
+  ];
+  
+  @override
+  void initState() {
+    super.initState();
+    rateController.text = '25';
+    spendingController.text = '100';
+    calculateTimeCost();
+  }
+  
+  @override
+  void dispose() {
+    rateController.dispose();
+    spendingController.dispose();
+    scrollController.dispose();
+    super.dispose();
+  }
+  
+  void calculateTimeCost() {
+    if (rateController.text.isEmpty || spendingController.text.isEmpty) {
+      setState(() {
+        showResults = false;
+      });
+      return;
+    }
+    
+    double rate = double.tryParse(rateController.text) ?? 0;
+    double spending = double.tryParse(spendingController.text) ?? 0;
+    
+    // Convert rate to hourly if needed
+    if (selectedRatePeriod == 'day') {
+      rate = rate / 8; // Assuming 8-hour workday
+    } else if (selectedRatePeriod == 'week') {
+      rate = rate / 40; // Assuming 40-hour workweek
+    } else if (selectedRatePeriod == 'month') {
+      rate = rate / 160; // Assuming 160-hour workmonth
+    } else if (selectedRatePeriod == 'year') {
+      rate = rate / 2080; // Assuming 2080-hour workyear
+    }
+    
+    if (rate <= 0) {
+      setState(() {
+        timeResult = 'Please enter a valid rate';
+        showResults = false;
+      });
+      return;
+    }
+    
+    // Calculate time in hours
+    double timeInHours = spending / rate;
+    
+    // Format the result
+    String formattedTime = formatTimeResult(timeInHours);
+    
+    setState(() {
+      timeResult = formattedTime;
+      showResults = true;
+    });
+    
+    // Scroll to result after calculation
+    if (showResults) {
+      scrollToResult();
+    }
+  }
+  
+  String formatTimeResult(double hours) {
+    if (hours < 1/60) {
+      // Less than a minute
+      int seconds = (hours * 3600).round();
+      return '$seconds second${seconds != 1 ? 's' : ''}';
+    } else if (hours < 1) {
+      // Less than an hour
+      int minutes = (hours * 60).round();
+      return '$minutes minute${minutes != 1 ? 's' : ''}';
+    } else if (hours < 24) {
+      // Less than a day
+      int wholeHours = hours.floor();
+      int minutes = ((hours - wholeHours) * 60).round();
+      
+      if (minutes == 0) {
+        return '$wholeHours hour${wholeHours != 1 ? 's' : ''}';
+      } else {
+        return '$wholeHours hour${wholeHours != 1 ? 's' : ''} and $minutes minute${minutes != 1 ? 's' : ''}';
+      }
+    } else if (hours < 168) {
+      // Less than a week
+      int days = (hours / 24).floor();
+      int remainingHours = (hours % 24).round();
+      
+      if (remainingHours == 0) {
+        return '$days day${days != 1 ? 's' : ''}';
+      } else {
+        return '$days day${days != 1 ? 's' : ''} and $remainingHours hour${remainingHours != 1 ? 's' : ''}';
+      }
+    } else {
+      // More than a week
+      int weeks = (hours / 168).floor(); // 168 hours in a week
+      int remainingDays = ((hours % 168) / 24).round();
+      
+      if (remainingDays == 0) {
+        return '$weeks week${weeks != 1 ? 's' : ''}';
+      } else {
+        return '$weeks week${weeks != 1 ? 's' : ''} and $remainingDays day${remainingDays != 1 ? 's' : ''}';
+      }
+    }
+  }
+  
+  void updateCurrencySymbols() {
+    setState(() {
+      // Update the currency symbols based on selection
+      selectedRateCurrency = currencySymbols[selectedRateCurrency] ?? '\$';
+      selectedSpendingCurrency = currencySymbols[selectedSpendingCurrency] ?? '\$';
+    });
+  }
+  
+  void scrollToResult() {
+    // In Flutter, we use a ScrollController to scroll to a specific widget
+    Future.delayed(Duration(milliseconds: 100), () {
+      if (scrollController.hasClients) {
+        scrollController.animateTo(
+          scrollController.position.maxScrollExtent,
+          duration: Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Time Cost Calculator'),
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        controller: scrollController,
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Rate input section
+            Text(
+              'Your hourly rate',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 12),
+            Row(
+              children: [
+                // Currency dropdown
+                DropdownButton<String>(
+                  value: selectedRateCurrency,
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        selectedRateCurrency = newValue;
+                        updateCurrencySymbols();
+                      });
+                    }
+                  },
+                  items: currencySymbols.keys.map<DropdownMenuItem<String>>((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    );
+                  }).toList(),
+                ),
+                SizedBox(width: 8),
+                // Rate input
+                Expanded(
+                  child: TextField(
+                    controller: rateController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter your rate',
+                    ),
+                    onChanged: (_) => calculateTimeCost(),
+                  ),
+                ),
+                SizedBox(width: 8),
+                // Period dropdown
+                DropdownButton<String>(
+                  value: selectedRatePeriod,
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        selectedRatePeriod = newValue;
+                        calculateTimeCost();
+                      });
+                    }
+                  },
+                  items: ['hour', 'day', 'week', 'month', 'year']
+                      .map<DropdownMenuItem<String>>((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text('per $value'),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+            
+            // Rate presets
+            SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              children: ratePresets.map((preset) {
+                return ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      rateController.text = preset['value'];
+                      selectedRatePeriod = preset['period'];
+                      calculateTimeCost();
+                    });
+                  },
+                  child: Text(preset['label']),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                  ),
+                );
+              }).toList(),
+            ),
+            
+            // Spending input section
+            SizedBox(height: 24),
+            Text(
+              'Purchase amount',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 12),
+            Row(
+              children: [
+                // Currency dropdown
+                DropdownButton<String>(
+                  value: selectedSpendingCurrency,
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        selectedSpendingCurrency = newValue;
+                        updateCurrencySymbols();
+                      });
+                    }
+                  },
+                  items: currencySymbols.keys.map<DropdownMenuItem<String>>((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    );
+                  }).toList(),
+                ),
+                SizedBox(width: 8),
+                // Spending input
+                Expanded(
+                  child: TextField(
+                    controller: spendingController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter amount',
+                    ),
+                    onChanged: (_) => calculateTimeCost(),
+                  ),
+                ),
+              ],
+            ),
+            
+            // Spending presets
+            SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              children: spendingPresets.map((preset) {
+                return ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      spendingController.text = preset['value'];
+                      calculateTimeCost();
+                    });
+                  },
+                  child: Text(preset['label']),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                  ),
+                );
+              }).toList(),
+            ),
+            
+            // Calculate button with ripple effect
+            SizedBox(height: 24),
+            Center(
+              child: InkWell(
+                onTap: calculateTimeCost,
+                borderRadius: BorderRadius.circular(8),
+                splashColor: Theme.of(context).primaryColor.withOpacity(0.3),
+                highlightColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Container(
+                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    child: Text(
+                      'Calculate',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            
+            // Results section
+            if (showResults) ...[
+              SizedBox(height: 32),
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'This purchase costs you',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      timeResult,
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'of your working time',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    SizedBox(height: 16),
+                    CustomPaint(
+                      size: Size(100, 100),
+                      painter: DollarSignPainter(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class DollarSignPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Path dollarPath = Path();
+    
+    // Vertical lines
+    dollarPath.moveTo(size.width * 0.45, size.height * 0.32);
+    dollarPath.lineTo(size.width * 0.45, size.height * 0.68);
+    dollarPath.moveTo(size.width * 0.55, size.height * 0.32);
+    dollarPath.lineTo(size.width * 0.55, size.height * 0.68);
+    
+    // S curve
+    dollarPath.moveTo(size.width * 0.55, size.height * 0.36);
+    dollarPath.cubicTo(
+      size.width * 0.55, size.height * 0.33,
+      size.width * 0.52, size.height * 0.30,
+      size.width * 0.47, size.height * 0.30,
+    );
+    dollarPath.cubicTo(
+      size.width * 0.42, size.height * 0.30,
+      size.width * 0.40, size.height * 0.33,
+      size.width * 0.40, size.height * 0.36,
+    );
+    dollarPath.cubicTo(
+      size.width * 0.40, size.height * 0.40,
+      size.width * 0.45, size.height * 0.41,
+      size.width * 0.50, size.height * 0.42,
+    );
+    dollarPath.cubicTo(
+      size.width * 0.55, size.height * 0.43,
+      size.width * 0.60, size.height * 0.44,
+      size.width * 0.60, size.height * 0.50,
+    );
+    dollarPath.cubicTo(
+      size.width * 0.60, size.height * 0.56,
+      size.width * 0.57, size.height * 0.60,
+      size.width * 0.50, size.height * 0.60,
+    );
+    dollarPath.cubicTo(
+      size.width * 0.43, size.height * 0.60,
+      size.width * 0.40, size.height * 0.56,
+      size.width * 0.40, size.height * 0.53,
+    );
+    
+    final Paint dollarPaint = Paint()
+      ..color = Color(0xFF3A6FF7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+    
+    canvas.drawPath(dollarPath, dollarPaint);
+  }
+  
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
